@@ -25,7 +25,7 @@ provider:
   environment:
     TODOS_TABLE: Todos-${self:provider.stage}
     TODOS_CREATED_AT_INDEX: CreatedAtIndex
-    TODOS_DUE_DATE_INDEX: DueAtIndex
+    TODOS_USER_ID_INDEX: UserIdIndex
     ATTACHMENT_S3_BUCKET: ghostscypher-serverless-c4-todo-images-${self:provider.stage}
     SIGNED_URL_EXPIRATION: 300
 
@@ -185,10 +185,18 @@ resources:
             AttributeType: S
           - AttributeName: dueDate
             AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: done
+            AttributeType: S
+          - AttributeName: attachmentUrl
+            AttributeType: S
+          - AttributeName: name
+            AttributeType: S
         KeySchema:
           - AttributeName: todoId
             KeyType: HASH
-          - AttributeName: dueDate
+          - AttributeName: userId
             KeyType: RANGE
         BillingMode: PAY_PER_REQUEST
         GlobalSecondaryIndexes:
@@ -199,11 +207,11 @@ resources:
             Projection:
               ProjectionType: ALL
         LocalSecondaryIndexes:
-          - IndexName: ${self:provider.environment.TODOS_DUE_DATE_INDEX}
+          - IndexName: ${self:provider.environment.TODOS_USER_ID_INDEX}
             KeySchema:
               - AttributeName: todoId
                 KeyType: HASH
-              - AttributeName: dueDate
+              - AttributeName: userId
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
