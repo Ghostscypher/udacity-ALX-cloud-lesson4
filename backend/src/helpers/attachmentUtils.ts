@@ -9,7 +9,7 @@ if (process.env.IS_OFFLINE) {
 const XAWS = AWSXRay.captureAWS(AWS)
 const logger = createLogger('TodosAccess')
 const s3 = new XAWS.S3({ signatureVersion: 'v4' })
-const bucketName = process.env.ATTACHMENTS_S3_BUCKET
+const bucketName = process.env.ATTACHMENT_S3_BUCKET
 const urlExpiration = process.env.SIGNED_URL_EXPIRATION
 
 // TODO: Implement the fileStogare logic
@@ -19,10 +19,10 @@ export function getAttachmentUrl(todoId: string) {
 
 export async function createAttachmentPresignedUrl(todoId: string) {
     logger.info('createAttachmentPresignedUrl', { todoId })
-    
+
     return s3.getSignedUrl('putObject', {
-        Bucket: `${bucketName}`,
-        Key: `${todoId}`,
+        Bucket: bucketName,
+        Key: todoId,
         Expires: parseInt(urlExpiration)
     })
 }
