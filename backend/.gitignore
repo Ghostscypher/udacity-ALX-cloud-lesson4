@@ -3,7 +3,8 @@ node_modules
 jspm_packages
 
 # Serverless directories
-.serverless
+.serverless/
+.build/
 
 # Webpack directories
 .webpack
