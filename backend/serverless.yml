@@ -1,4 +1,4 @@
-# TODO: Change the name of the org 
+# TODO: Change the name of the org
 org: ghostscypher
 app: serverless-todo-app
 service: serverless-todo-app
@@ -7,11 +7,22 @@ plugins:
   - serverless-plugin-typescript
   - serverless-iam-roles-per-function
   - serverless-plugin-tracing
+  - serverless-dynamodb-local
+  - serverless-offline
+
+custom:
+  dynamodb:
+    stages:
+      - dev
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+      seed: true
 
 provider:
   name: aws
   runtime: nodejs12.x
-  lambdaHashingVersion: '20201221'
 
   stage: ${opt:stage, 'dev'}
   region: ${opt:region, 'us-east-1'}
@@ -20,12 +31,16 @@ provider:
     lambda: true
     apiGateway: true
 
-  # Use these variables in the functions and resources section below. For example, 
+  # Use these variables in the functions and resources section below. For example,
   # ${self:provider.environment.ATTACHMENT_S3_BUCKET}
   environment:
     TODOS_TABLE: Todos-${self:provider.stage}
     TODOS_CREATED_AT_INDEX: CreatedAtIndex
-    TODOS_DUE_DATE_INDEX: DueAtIndex
+    TODOS_USER_ID_INDEX: UserIdIndex
+    TODOS_DUE_DATE_INDEX: DueDateIndex
+    TODOS_DONE_INDEX: DoneIndex
+    TODOS_NAME_INDEX: NameIndex
+    TODOS_ATTACHMENT_URL_INDEX: AttachmentUrlIndex
     ATTACHMENT_S3_BUCKET: ghostscypher-serverless-c4-todo-images-${self:provider.stage}
     SIGNED_URL_EXPIRATION: 300
 
@@ -40,15 +55,13 @@ provider:
           Action:
             - xray:PutTelemetryRecords
             - xray:PutTraceSegments
-          Resource: "*"
-
+          Resource: '*'
 
 functions:
-
   Auth:
     handler: src/lambda/auth/auth0Authorizer.handler
 
-  # TODO: Configure this function - 
+  # TODO: Configure this function -
   # Provide iamRoleStatements property for performing Actions on DynamoDB
   GetTodos:
     handler: src/lambda/http/getTodos.handler
@@ -62,12 +75,15 @@ functions:
       - Effect: Allow
         Action:
           - dynamodb:Scan
-        Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}"
+          - dynamodb:Query
+        Resource: 
+          - 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}'
+          - 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}/index/*'
 
-  # TODO: Configure this function - 
-  # Provide iamRoleStatements property. Decide the Actions and AWS Resource. 
+  # TODO: Configure this function -
+  # Provide iamRoleStatements property. Decide the Actions and AWS Resource.
   # To refer to an AWS resource defined in the "Resources" section, you can use "Resource: !GetAtt <resource-name>.Arn"
-  # To validate incoming HTTP requests, we have provided the request schemas in function definition below. 
+  # To validate incoming HTTP requests, we have provided the request schemas in function definition below.
   CreateTodo:
     handler: src/lambda/http/createTodo.handler
     events:
@@ -83,7 +99,7 @@ functions:
       - Effect: Allow
         Action:
           - dynamodb:PutItem
-        Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}"
+        Resource: 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}'
 
   # TODO: Configure this function
   # Provide property for setting up CORS, Authorizer, iamRoleStatements, and request schemas
@@ -102,7 +118,7 @@ functions:
       - Effect: Allow
         Action:
           - dynamodb:UpdateItem
-        Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}"
+        Resource: 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}'
 
   # TODO: Configure this function
   # Provide property for setting up CORS, Authorizer, iamRoleStatements
@@ -118,7 +134,7 @@ functions:
       - Effect: Allow
         Action:
           - dynamodb:DeleteItem
-        Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}"
+        Resource: 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}'
 
   # TODO: Configure this function
   # Provide property for setting up CORS, Authorizer, iamRoleStatements
@@ -134,47 +150,26 @@ functions:
       - Effect: Allow
         Action:
           - s3:PutObject
-        Resource: "arn:aws:s3:::${self:provider.environment.ATTACHMENT_S3_BUCKET}/*"
+        Resource: 'arn:aws:s3:::${self:provider.environment.ATTACHMENT_S3_BUCKET}/*'
 
 resources:
   Resources:
     # Add necessary AWS resources. You will need at least the following AWS resources
     # TODO: Fill the properties
-    # Feel free to change the names as you like. 
+    # Feel free to change the names as you like.
     GatewayResponseDefault4XX:
       Type: AWS::ApiGateway::GatewayResponse
       Properties:
         ResponseParameters:
           gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,OPTIONS,POST'"
         ResponseType: DEFAULT_4XX
         RestApiId:
           Ref: ApiGatewayRestApi
-      
-    # TodosDynamoDBTable:
-    #   Type: AWS::DynamoDB::Table
-    #   Properties:
-    #     TableName: ${self:provider.environment.TODOS_TABLE}
-    #     AttributeDefinitions:
-    #       - AttributeName: todoId
-    #         AttributeType: S
-    #       - AttributeName: createdAt
-    #         AttributeType: S
-    #     KeySchema:
-    #       - AttributeName: todoId
-    #         KeyType: HASH
-    #     BillingMode: PAY_PER_REQUEST
-    #     GlobalSecondaryIndexes:
-    #       - IndexName: ${self:provider.environment.TODOS_CREATED_AT_INDEX}
-    #         KeySchema:
-    #           - AttributeName: createdAt
-    #             KeyType: HASH
-    #         Projection:
-    #           ProjectionType: ALL
-    #     SSESpecification:
-    #       SSEEnabled: true
-    
+
     # TODO: Create a DynamoDB table with local secondary index and a composite key
-    TodosTable:
+    TodosDynamoDBTable:
       Type: AWS::DynamoDB::Table
       Properties:
         TableName: ${self:provider.environment.TODOS_TABLE}
@@ -183,22 +178,38 @@ resources:
             AttributeType: S
           - AttributeName: createdAt
             AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
           - AttributeName: dueDate
             AttributeType: S
+          - AttributeName: attachmentUrl
+            AttributeType: S
+          - AttributeName: name
+            AttributeType: S
         KeySchema:
-          - AttributeName: todoId
+          - AttributeName: userId
             KeyType: HASH
-          - AttributeName: dueDate
+          - AttributeName: todoId
             KeyType: RANGE
         BillingMode: PAY_PER_REQUEST
+        LocalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.TODOS_USER_ID_INDEX}
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: todoId
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
         GlobalSecondaryIndexes:
           - IndexName: ${self:provider.environment.TODOS_CREATED_AT_INDEX}
             KeySchema:
-              - AttributeName: createdAt
+              - AttributeName: todoId
                 KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
             Projection:
               ProjectionType: ALL
-        LocalSecondaryIndexes:
           - IndexName: ${self:provider.environment.TODOS_DUE_DATE_INDEX}
             KeySchema:
               - AttributeName: todoId
@@ -207,11 +218,27 @@ resources:
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
+          - IndexName: ${self:provider.environment.TODOS_ATTACHMENT_URL_INDEX}
+            KeySchema:
+              - AttributeName: todoId
+                KeyType: HASH
+              - AttributeName: attachmentUrl
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: ${self:provider.environment.TODOS_NAME_INDEX}
+            KeySchema:
+              - AttributeName: todoId
+                KeyType: HASH
+              - AttributeName: name
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
         SSESpecification:
           SSEEnabled: true
 
-    # TODO: Complete the bucket properties below. 
-    # Do not forget to add the CorsConfiguration propoerty
+    # TODO: Complete the bucket properties below.
+    # Do not forget to add the CorsConfiguration property
     AttachmentsBucket:
       Type: AWS::S3::Bucket
       Properties:
@@ -219,7 +246,7 @@ resources:
         CorsConfiguration:
           CorsRules:
             - AllowedHeaders:
-                - "*"
+                - '*'
               AllowedMethods:
                 - GET
                 - PUT
@@ -227,7 +254,7 @@ resources:
                 - DELETE
                 - HEAD
               AllowedOrigins:
-                - "*"
+                - '*'
               MaxAge: 3000
 
     # TODO: Complete the policy below and attach it to the bucket defined above
@@ -238,11 +265,11 @@ resources:
         Bucket: !Ref AttachmentsBucket
         PolicyDocument:
           Id: MyPolicy
-          Version: "2012-10-17"
+          Version: '2012-10-17'
           Statement:
             - Sid: PublicReadForGetBucketObjects
               Effect: Allow
-              Principal: "*"
+              Principal: '*'
               Action:
                 - s3:GetObject
-              Resource: "arn:aws:s3:::${self:provider.environment.ATTACHMENT_S3_BUCKET}/*"
+              Resource: 'arn:aws:s3:::${self:provider.environment.ATTACHMENT_S3_BUCKET}/*'
